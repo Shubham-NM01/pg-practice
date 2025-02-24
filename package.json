@@ -1,5 +1,5 @@
 {
-  "name": "node-starter",
+  "name": "starter",
   "private": true,
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -9,10 +9,26 @@
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "ejs": "^3.1.10",
     "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
     "pg": "^8.13.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
-  }
+  },
+  "version": "1.0.0",
+  "description": "[Edit in StackBlitz next generation editor ⚡️](https://stackblitz.com/~/github.com/Shubham-NM01/pg-practice)",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Shubham-NM01/pg-practice.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Shubham-NM01/pg-practice/issues"
+  },
+  "homepage": "https://github.com/Shubham-NM01/pg-practice#readme"
 }
