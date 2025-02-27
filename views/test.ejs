@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        .pdf-table {
+            min-height: 200px;
+        }
+
+        .action-buttons .btn {
+            padding: 0.25rem 0.5rem;
+        }
+
+        .modal-body embed {
+            width: 100%;
+            height: 500px;
+        }
+
+        .loading {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.7);
+            z-index: 1000;
+        }
+
+        #signatureModal .modal-dialog {
+            max-width: 95%;
+            max-height: 95%;
+            margin: 10px auto;
+        }
+
+        #signatureModal .modal-content {
+            height: calc(100vh - 20px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #signatureModal .modal-body {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #pdfContainer {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+            background: #f5f5f5;
+        }
+
+        .signature-toolbar {
+            padding: 10px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        canvas.signature-pad {
+            border: 1px solid #ced4da;
+            background-color: white;
+        }
+
+        .signature-item {
+            position: absolute;
+            cursor: move;
+            z-index: 100;
+            border: 1px dashed #007bff;
+        }
+
+        .signature-controls {
+            position: absolute;
+            top: -25px;
+            right: 0;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #dee2e6;
+            border-radius: 3px;
+            display: none;
+        }
+
+        .signature-item:hover .signature-controls {
+            display: block;
+        }
+
+        .pdf-page {
+            position: relative;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            background-color: white;
+        }
+
+        .page-number {
+            position: absolute;
+            bottom: 5px;
+            right: 5px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+
+        .signature-resize-handle {
+            width: 10px;
+            height: 10px;
+            background-color: #007bff;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            cursor: se-resize;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>PDF Manager</h1>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                <i class="fas fa-upload me-2"></i>Upload New PDF
+            </button>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">Your PDFs</h5>
+            </div>
+            <div class="card-body pdf-table position-relative">
+                <div class="loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+
+                <% if (pdfs.length===0) { %>
+                    <p class="text-center">No PDFs uploaded yet.</p>
+                    <% } else { %>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Upload Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% pdfs.forEach(pdf=> { %>
+                                        <tr>
+                                            <td>
+                                                <%= pdf.originalFilename %>
+                                            </td>
+                                            <td>
+                                                <%= new Date(pdf.uploadDate).toLocaleString() %>
+                                            </td>
+                                            <td class="action-buttons">
+                                                <button class="btn btn-info btn-sm view-pdf" data-id="<%= pdf.id %>"
+                                                    data-filename="<%= pdf.filename %>"
+                                                    data-original="<%= pdf.originalFilename %>">
+                                                    <i class="fas fa-eye"></i>
+                                                </button>
+                                                <button class="btn btn-warning btn-sm sign-pdf" data-id="<%= pdf.id %>"
+                                                    data-filename="<%= pdf.filename %>"
+                                                    data-original="<%= pdf.originalFilename %>">
+                                                    <i class="fas fa-signature"></i>
+                                                </button>
+                                                <a href="/download/<%= pdf.id %>" class="btn btn-success btn-sm">
+                                                    <i class="fas fa-download"></i>
+                                                </a>
+                                                <button class="btn btn-danger btn-sm delete-pdf"
+                                                    data-id="<%= pdf.id %>">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <% }) %>
+                                </tbody>
+                            </table>
+                        </div>
+                        <% } %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Modal -->
+    <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="uploadModalLabel">Upload New PDF</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="uploadForm" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="pdfFile" class="form-label">Select PDF File:</label>
+                            <input type="file" class="form-control" id="pdfFile" name="pdf" accept="application/pdf"
+                                required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="submitUpload">Upload</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- View PDF Modal -->
+    <div class="modal fade" id="viewPdfModal" tabindex="-1" aria-labelledby="viewPdfModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="viewPdfModalLabel">View PDF</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <embed id="pdfEmbed" src="" type="application/pdf">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signature Modal -->
+    <div class="modal fade" id="signatureModal" tabindex="-1" aria-labelledby="signatureModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-fullscreen-lg-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="signatureModalLabel">Add Signatures</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="signature-toolbar d-flex gap-2 flex-wrap">
+                    <div class="d-flex align-items-center">
+                        <span class="me-2">Page:</span>
+                        <select id="pageSelector" class="form-select form-select-sm" style="width: 80px;">
+                            <option value="1">1</option>
+                        </select>
+                    </div>
+                    <div class="d-flex">
+                        <button id="clearCanvas" class="btn btn-sm btn-secondary me-2">Clear</button>
+                        <button id="addSignature" class="btn btn-sm btn-primary me-2">Add This Signature</button>
+                        <button id="addImageSignature" class="btn btn-sm btn-outline-primary me-2">
+                            <i class="fas fa-image me-1"></i>Upload Signature Image
+                        </button>
+                        <input type="file" id="signatureImage" accept="image/*" style="display: none;">
+                    </div>
+                    <div class="ms-auto">
+                        <button id="saveSignedPdf" class="btn btn-success">
+                            <i class="fas fa-save me-1"></i>Save Signed PDF
+                        </button>
+                    </div>
+                </div>
+                <div class="d-flex mb-2 px-3 pt-2">
+                    <div class="signature-canvas-container">
+                        <label for="signatureCanvas" class="form-label">Draw Your Signature:</label>
+                        <canvas id="signatureCanvas" class="signature-pad" width="400" height="150"></canvas>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div id="pdfContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteConfirmModalLabel">Confirm Delete</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete this PDF?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDelete">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- jQuery UI - for draggable -->
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+
+    <script>
+        // Set up PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        $(document).ready(function () {
+            // Show loading
+            function showLoading() {
+                $('.loading').css('display', 'flex');
+            }
+
+            // Hide loading
+            function hideLoading() {
+                $('.loading').css('display', 'none');
+            }
+
+            // Upload PDF
+            $('#submitUpload').click(function () {
+                const formData = new FormData($('#uploadForm')[0]);
+                showLoading();
+
+                $.ajax({
+                    url: '/upload',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function (response) {
+                        if (response.success) {
+                            // Close the modal
+                            $('#uploadModal').modal('hide');
+                            // Reset the form
+                            $('#uploadForm')[0].reset();
+                            // Reload the page to show the new PDF
+                            location.reload();
+                        }
+                    },
+                    error: function (error) {
+                        alert('Error uploading file: ' + (error.responseJSON ? error.responseJSON.error : 'Unknown error'));
+                        hideLoading();
+                    }
+                });
+            });
+
+            // View PDF
+            $('.view-pdf').click(function () {
+                const filename = $(this).data('filename');
+                const originalName = $(this).data('original');
+
+                $('#viewPdfModalLabel').text(originalName);
+                $('#pdfEmbed').attr('src', '/uploads/' + filename);
+                $('#viewPdfModal').modal('show');
+            });
+
+            // Delete PDF
+            $('.delete-pdf').click(function () {
+                const id = $(this).data('id');
+                $('#confirmDelete').data('id', id);
+                $('#deleteConfirmModal').modal('show');
+            });
+
+            // Confirm Delete
+            $('#confirmDelete').click(function () {
+                const id = $(this).data('id');
+                showLoading();
+
+                $.ajax({
+                    url: '/delete/' + id,
+                    type: 'DELETE',
+                    success: function (response) {
+                        if (response.success) {
+                            // Close the modal
+                            $('#deleteConfirmModal').modal('hide');
+                            // Reload the page to update the list
+                            location.reload();
+                        }
+                    },
+                    error: function (error) {
+                        alert('Error deleting PDF: ' + (error.responseJSON ? error.responseJSON.error : 'Unknown error'));
+                        hideLoading();
+                    }
+                });
+            });
+
+            // Signature functionality
+            let pdfDoc = null;
+            let currentPdfId = null;
+            let signatureCounter = 0;
+            let signatures = [];
+
+            // Initialize signature canvas
+            const canvas = document.getElementById('signatureCanvas');
+            const ctx = canvas.getContext('2d');
+            let isDrawing = false;
+            let lastX = 0;
+            let lastY = 0;
+
+            // Set up the canvas
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#000';
+
+            // Mouse/touch events for signature canvas
+            canvas.addEventListener('mousedown', startDrawing);
+            canvas.addEventListener('touchstart', startDrawingTouch);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('touchmove', drawTouch);
+            canvas.addEventListener('mouseup', stopDrawing);
+            canvas.addEventListener('touchend', stopDrawing);
+            canvas.addEventListener('mouseout', stopDrawing);
+
+            function startDrawing(e) {
+                isDrawing = true;
+                [lastX, lastY] = [e.offsetX, e.offsetY];
+            }
+
+            function startDrawingTouch(e) {
+                e.preventDefault();
+                isDrawing = true;
+                const rect = canvas.getBoundingClientRect();
+                const touch = e.touches[0];
+                [lastX, lastY] = [touch.clientX - rect.left, touch.clientY - rect.top];
+            }
+
+            function draw(e) {
+                if (!isDrawing) return;
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(e.offsetX, e.offsetY);
+                ctx.stroke();
+                [lastX, lastY] = [e.offsetX, e.offsetY];
+            }
+
+            function drawTouch(e) {
+                if (!isDrawing) return;
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const touch = e.touches[0];
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+                [lastX, lastY] = [x, y];
+            }
+
+            function stopDrawing() {
+                isDrawing = false;
+            }
+
+            function isCanvasBlank(canvas) {
+                const context = canvas.getContext('2d');
+                const pixelBuffer = new Uint32Array(
+                    context.getImageData(0, 0, canvas.width, canvas.height).data.buffer
+                );
+                return !pixelBuffer.some(color => color !== 0);
+            }
+            // Clear signature canvas
+            $('#clearCanvas').click(function () {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            });
+
+            // Add image signature
+            $('#addImageSignature').click(function () {
+                $('#signatureImage').click();
+            });
+
+            $('#signatureImage').change(function (e) {
+                if (e.target.files && e.target.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function (event) {
+                        const img = new Image();
+                        img.onload = function () {
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                            // Calculate dimensions to fit in canvas
+                            const ratio = img.width / img.height;
+                            let newWidth = canvas.width;
+                            let newHeight = newWidth / ratio;
+
+                            if (newHeight > canvas.height) {
+                                newHeight = canvas.height;
+                                newWidth = newHeight * ratio;
+                            }
+
+                            const xOffset = (canvas.width - newWidth) / 2;
+                            const yOffset = (canvas.height - newHeight) / 2;
+
+                            ctx.drawImage(img, xOffset, yOffset, newWidth, newHeight);
+                        };
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(e.target.files[0]);
+                }
+            });
+
+            // Sign PDF button
+            $('.sign-pdf').click(function () {
+                const id = $(this).data('id');
+                const filename = $(this).data('filename');
+                const originalName = $(this).data('original');
+                currentPdfId = id;
+
+                // Clear previous state but don't reset signatures array
+                $('#signatureModalLabel').text('Add Signatures to: ' + originalName);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                $('#pdfContainer').empty();
+
+                // Load the PDF
+                loadPdfForSigning('/uploads/' + filename);
+                $('#signatureModal').modal('show');
+            });
+
+            // Add the current signature to the PDF
+            $('#addSignature').click(function () {
+                // Check if canvas is empty
+                const imageData = canvas.toDataURL('image/png');
+                const blank = isCanvasBlank(canvas);
+
+                if (blank) {
+                    alert('Please draw a signature first');
+                    return;
+                }
+
+                // Get the current page
+                const currentPage = parseInt($('#pageSelector').val());
+
+                // Add a div with the signature to the current page
+                addSignatureToPage(imageData, currentPage);
+
+                // Clear the canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            });
+
+            // Save the signed PDF
+            $('#saveSignedPdf').click(function () {
+                if (signatures.length === 0) {
+                    alert('Please add at least one signature to the PDF');
+                    return;
+                }
+
+                const saveBtn = $(this);
+                const originalText = saveBtn.html();
+                saveBtn.html('<i class="fas fa-spinner fa-spin"></i> Saving...');
+                saveBtn.prop('disabled', true);
+
+                console.log('Sending signatures:', JSON.stringify(signatures));
+
+                $.ajax({
+                    url: '/sign-pdf/' + currentPdfId,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ signatures }),
+                    success: function (response) {
+                        if (response.success) {
+                            $('#signatureModal').modal('hide');
+
+                            // Show success with more detail
+                            const successAlert = $('<div class="alert alert-success alert-dismissible fade show" role="alert">')
+                                .html('PDF signed successfully! <a href="/download/' + response.newPdfId + '">Download</a>')
+                                .appendTo('.container');
+
+                            // Auto-dismiss after 5 seconds
+                            setTimeout(() => {
+                                successAlert.alert('close');
+                            }, 5000);
+
+                            location.reload();
+                        }
+                    },
+                    error: function (error) {
+                        alert('Error signing PDF: ' + (error.responseJSON ? error.responseJSON.error : 'Unknown error'));
+                        hideLoading();
+
+                        // Reset button
+                        saveBtn.html(originalText);
+                        saveBtn.prop('disabled', false);
+                    }
+                });
+            });
+
+            // Add a signature to the page
+            // function addSignatureToPage(imageData, pageNumber) {
+            //     // Create signature ID
+            //     const signatureId = 'sig-' + (++signatureCounter);
+
+            //     // Get the page container
+            //     const pageContainer = $('#pdfContainer .pdf-page[data-page="' + pageNumber + '"]');
+
+            //     // Create a new signature element
+            //     const signatureElement = $('<div class="signature-item"></div>');
+            //     signatureElement.attr('id', signatureId);
+            //     signatureElement.attr('data-page', pageNumber);
+
+            //     // Create an image with the signature
+            //     const signatureImage = $('<img>').attr('src', imageData);
+            //     signatureImage.css({
+            //         width: '200px',
+            //         height: 'auto',
+            //         display: 'block'
+            //     });
+
+            //     // Add controls
+            //     const controls = $('<div class="signature-controls"></div>');
+            //     const deleteBtn = $('<button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>');
+            //     controls.append(deleteBtn);
+
+            //     // Append elements
+            //     signatureElement.append(signatureImage);
+            //     signatureElement.append(controls);
+            //     pageContainer.append(signatureElement);
+
+            //     // Position the signature in the center of the visible part of the page
+            //     const pageOffset = pageContainer.offset();
+            //     const containerOffset = $('#pdfContainer').offset();
+            //     const scrollTop = $('#pdfContainer').scrollTop();
+
+            //     const centerX = (pageContainer.width() - signatureElement.width()) / 2;
+            //     const centerY = (pageContainer.height() - signatureElement.height()) / 2;
+
+            //     signatureElement.css({
+            //         left: centerX + 'px',
+            //         top: centerY + 'px'
+            //     });
+
+            //     // Make the signature draggable
+            //     signatureElement.draggable({
+            //         containment: pageContainer,
+            //         start: function (event, ui) {
+            //             // Move this signature to the top
+            //             $(this).css('z-index', 100);
+            //             $('.signature-item').not(this).css('z-index', 10);
+            //         },
+            //         stop: function (event, ui) {
+            //             // Update signature position in the signatures array
+            //             updateSignaturePosition(signatureId);
+            //         }
+            //     });
+
+            //     // ...existing code...
+            //     // Handle delete button
+            //     deleteBtn.click(function () {
+            //         // Remove from the DOM
+            //         signatureElement.remove();
+
+            //         // Remove from signatures array
+            //         signatures = signatures.filter(sig => sig.id !== signatureId);
+            //     });
+
+            //     // Add to signatures array
+            //     signatures.push({
+            //         id: signatureId,
+            //         imageData: imageData,
+            //         pageNumber: pageNumber,
+            //         x: centerX,
+            //         y: centerY,
+            //         width: signatureImage.width(),
+            //         height: signatureImage.height()
+            //     });
+            // }
+
+            // Update the addSignatureToPage function
+            function addSignatureToPage(imageData, pageNumber) {
+                // Create signature ID
+                const signatureId = 'sig-' + (++signatureCounter);
+
+                // Get the page container
+                const pageContainer = $('#pdfContainer .pdf-page[data-page="' + pageNumber + '"]');
+                if (pageContainer.length === 0) {
+                    alert('Page container not found!');
+                    return;
+                }
+
+                // Create a new signature element
+                const signatureElement = $('<div class="signature-item"></div>');
+                signatureElement.attr('id', signatureId);
+                signatureElement.attr('data-page', pageNumber);
+
+                // Create an image with the signature
+                const signatureImage = $('<img>').attr('src', imageData);
+                signatureImage.css({
+                    width: '200px',
+                    height: 'auto',
+                    display: 'block'
+                });
+
+                // Add controls
+                const controls = $('<div class="signature-controls"></div>');
+                const deleteBtn = $('<button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>');
+                controls.append(deleteBtn);
+
+                // Append elements
+                signatureElement.append(signatureImage);
+                signatureElement.append(controls);
+                pageContainer.append(signatureElement);
+
+                // Position the signature in the center of the visible part of the page
+                const centerX = (pageContainer.width() - 200) / 2;
+                const centerY = (pageContainer.height() - 100) / 2;
+
+                signatureElement.css({
+                    left: centerX + 'px',
+                    top: centerY + 'px'
+                });
+
+                // Only show signatures for the current page
+                $('.signature-item').hide();
+                $('.signature-item[data-page="' + pageNumber + '"]').show();
+
+                // Make the signature draggable
+                signatureElement.draggable({
+                    containment: pageContainer,
+                    start: function (event, ui) {
+                        // Move this signature to the top
+                        $(this).css('z-index', 100);
+                        $('.signature-item').not(this).css('z-index', 10);
+                    },
+                    stop: function (event, ui) {
+                        // Update signature position in the signatures array
+                        updateSignaturePosition(signatureId);
+                    }
+                });
+
+                // Add to your signature element creation
+                const resizeHandle = $('<div class="signature-resize-handle"></div>');
+                signatureElement.append(resizeHandle);
+
+                // Make resizable
+                signatureElement.resizable({
+                    handles: {
+                        se: '.signature-resize-handle'
+                    },
+                    stop: function (event, ui) {
+                        updateSignaturePosition(signatureId);
+                    }
+                });
+
+                // Handle delete button
+                deleteBtn.click(function () {
+                    // Remove from the DOM
+                    signatureElement.remove();
+
+                    // Remove from signatures array
+                    signatures = signatures.filter(sig => sig.id !== signatureId);
+                });
+
+                // Add to signatures array
+                signatures.push({
+                    id: signatureId,
+                    imageData: imageData,
+                    pageNumber: pageNumber,
+                    x: centerX,
+                    y: centerY,
+                    width: 200,
+                    height: signatureImage.height() || 100
+                });
+            }
+
+            // Update signature position in array when dragged
+            function updateSignaturePosition(signatureId) {
+                const signatureElement = $(`#${signatureId}`);
+                const pageNumber = parseInt(signatureElement.data('page'));
+                const position = signatureElement.position();
+                const width = signatureElement.width();  // Use the element's width, not just the image
+                const height = signatureElement.height();
+
+                // Find and update the signature in the array
+                const signatureIndex = signatures.findIndex(sig => sig.id === signatureId);
+                if (signatureIndex !== -1) {
+                    signatures[signatureIndex] = {
+                        ...signatures[signatureIndex],
+                        x: position.left,
+                        y: position.top,
+                        width: width,
+                        height: height,
+                        pageNumber: pageNumber
+                    };
+                }
+            }
+
+            // Load PDF for signing
+            async function loadPdfForSigning(pdfUrl) {
+                try {
+                    // Load the PDF document
+                    const loadingTask = pdfjsLib.getDocument(pdfUrl);
+                    pdfDoc = await loadingTask.promise;
+
+                    // Update page selector
+                    const pageSelector = $('#pageSelector');
+                    pageSelector.empty();
+                    for (let i = 1; i <= pdfDoc.numPages; i++) {
+                        pageSelector.append(`<option value="${i}">${i}</option>`);
+                    }
+
+                    // Load first page by default
+                    await loadPdfPage(1);
+
+                    // Handle page changes
+                    // Handle page changes
+                    pageSelector.change(function () {
+                        const pageNumber = parseInt($(this).val());
+                        loadPdfPage(pageNumber);
+
+                        // Update visible signatures for this page
+                        $('.signature-item').hide();
+                        $('.signature-item[data-page="' + pageNumber + '"]').show();
+                    });
+                } catch (error) {
+                    console.error('Error loading PDF:', error);
+                    alert('Error loading PDF document');
+                }
+            }
+
+            // Load specific PDF page
+            // async function loadPdfPage(pageNumber) {
+            //     try {
+            //         const page = await pdfDoc.getPage(pageNumber);
+            //         const viewport = page.getViewport({ scale: 1.5 });
+
+            //         // Create canvas for this page
+            //         const pageContainer = $('<div class="pdf-page"></div>');
+            //         pageContainer.attr('data-page', pageNumber);
+            //         pageContainer.css({
+            //             width: viewport.width + 'px',
+            //             height: viewport.height + 'px',
+            //             margin: '0 auto'
+            //         });
+
+            //         const canvas = document.createElement('canvas');
+            //         const context = canvas.getContext('2d');
+            //         canvas.width = viewport.width;
+            //         canvas.height = viewport.height;
+
+            //         // Add page number
+            //         const pageNumberDiv = $('<div class="page-number">Page ' + pageNumber + '</div>');
+            //         pageContainer.append(pageNumberDiv);
+
+            //         // Clear previous content and add new page
+            //         $('#pdfContainer').empty().append(pageContainer);
+            //         pageContainer.prepend(canvas);
+
+            //         // Render PDF page
+            //         const renderContext = {
+            //             canvasContext: context,
+            //             viewport: viewport
+            //         };
+
+            //         await page.render(renderContext).promise;
+            //     } catch (error) {
+            //         console.error('Error rendering page:', error);
+            //         alert('Error rendering PDF page');
+            //     }
+            // }
+            async function loadPdfPage(pageNumber) {
+                try {
+                    // Check if this page is already rendered
+                    if ($('#pdfContainer .pdf-page[data-page="' + pageNumber + '"]').length > 0) {
+                        // Just show this page and hide others
+                        $('#pdfContainer .pdf-page').hide();
+                        $('#pdfContainer .pdf-page[data-page="' + pageNumber + '"]').show();
+                        return;
+                    }
+
+                    const page = await pdfDoc.getPage(pageNumber);
+                    const viewport = page.getViewport({ scale: 1.5 });
+
+                    // Create canvas for this page
+                    const pageContainer = $('<div class="pdf-page"></div>');
+                    pageContainer.attr('data-page', pageNumber);
+                    pageContainer.css({
+                        width: viewport.width + 'px',
+                        height: viewport.height + 'px',
+                        margin: '0 auto'
+                    });
+
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+
+                    // Add page number
+                    const pageNumberDiv = $('<div class="page-number">Page ' + pageNumber + '</div>');
+                    pageContainer.append(pageNumberDiv);
+
+                    // Hide other pages and append new page without clearing previous ones
+                    $('#pdfContainer .pdf-page').hide();
+                    $('#pdfContainer').append(pageContainer);
+                    pageContainer.prepend(canvas);
+
+                    // Render PDF page
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+
+                    await page.render(renderContext).promise;
+                } catch (error) {
+                    console.error('Error rendering page:', error);
+                    alert('Error rendering PDF page');
+                }
+            }
+        });
+    </script>

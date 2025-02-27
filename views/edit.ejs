@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit PDF - <%= pdf.originalFilename %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Edit PDF: <%= pdf.originalFilename %></h1>
+    <a href="/view/<%= pdf.id %>" class="btn">Back to PDF</a>
+    
+    <div class="edit-form">
+      <form action="/edit/<%= pdf.id %>" method="POST">
+        <div class="form-group">
+          <label for="description">Description:</label>
+          <textarea id="description" name="description" rows="4"><%= pdf.description %></textarea>
+        </div>
+        <button type="submit" class="btn">Save Changes</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
