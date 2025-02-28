@@ -18,7 +18,7 @@
             position: absolute;
             cursor: move;
             z-index: 100;
-            border: 1px dashed #007bff;
+            border: 1px dashed transparent;
         }
 
         .signature-controls {
@@ -26,11 +26,15 @@
             top: -25px;
             right: 0;
             background: rgba(255, 255, 255, 0.9);
-            border: 1px solid #dee2e6;
+            /* border: 1px solid #dee2e6; */
             border-radius: 3px;
             display: none;
         }
 
+        .signature-item:hover { 
+            border: 1px dashed #007bff;
+        }
+        
         .signature-item:hover .signature-controls {
             display: block;
         }
@@ -38,7 +42,7 @@
         .signature-resize-handle {
             width: 10px;
             height: 10px;
-            background-color: #007bff;
+            /* background-color: #007bff; */
             position: absolute;
             bottom: 0;
             right: 0;
@@ -136,7 +140,10 @@
 
             function startDrawing(e) {
                 isDrawing = true;
-                [lastX, lastY] = [e.offsetX, e.offsetY];
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                [lastX, lastY] = [(e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY];
             }
 
             function startDrawingTouch(e) {
@@ -149,11 +156,17 @@
 
             function draw(e) {
                 if (!isDrawing) return;
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const x = (e.clientX - rect.left) * scaleX;
+                const y = (e.clientY - rect.top) * scaleY;
+                
                 ctx.beginPath();
                 ctx.moveTo(lastX, lastY);
-                ctx.lineTo(e.offsetX, e.offsetY);
+                ctx.lineTo(x, y);
                 ctx.stroke();
-                [lastX, lastY] = [e.offsetX, e.offsetY];
+                [lastX, lastY] = [x, y];
             }
 
             function drawTouch(e) {
@@ -305,7 +318,7 @@
                 const signatureImage = $('<img>')
                     .attr('src', imageData)
                     .css({
-                        width: '300px',
+                        width: '200px',
                         height: 'auto',
                         display: 'block'
                     });
@@ -334,10 +347,11 @@
                         $('.signature-item').not(this).css('z-index', 10);
                     },
                     stop: updateSignaturePosition
-                }).resizable({
-                    handles: { se: '.signature-resize-handle' },
-                    stop: updateSignaturePosition
-                });
+                })
+                // .resizable({
+                //     handles: { se: '.signature-resize-handle' },
+                //     stop: updateSignaturePosition
+                // });
 
                 controls.find('button').click(function () {
                     signatureElement.remove();
