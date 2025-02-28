@@ -243,7 +243,7 @@
                             }
 
                             const page = await pdfDoc.getPage(pageNumber);
-                            const viewport = page.getViewport({ scale: 1.5 });
+                            const viewport = page.getViewport({ scale: 1 });
 
                             const pageContainer = $('<div class="pdf-page relative bg-white shadow"></div>');
                             pageContainer.attr('data-page', pageNumber);

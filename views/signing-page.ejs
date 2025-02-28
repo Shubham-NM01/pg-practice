@@ -97,6 +97,7 @@
     <!-- jQuery and jQuery UI -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+    <!-- <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/smoothness/jquery-ui.css"> -->
     <script>
         // Configure PDF.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
@@ -177,6 +178,7 @@
             // Handle canvas clear
             $('#clearCanvas').click(() => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                $('#signatureImage').val('')
             });
 
             // Handle image upload
@@ -289,7 +291,7 @@
 
                 const currentPage = parseInt($('#pageSelector').val());
                 addSignatureToPage(imageData, currentPage);
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // ctx.clearRect(0, 0, canvas.width, canvas.height);
             });
 
             function addSignatureToPage(imageData, pageNumber) {
@@ -303,13 +305,13 @@
                 const signatureImage = $('<img>')
                     .attr('src', imageData)
                     .css({
-                        width: '200px',
+                        width: '300px',
                         height: 'auto',
                         display: 'block'
                     });
 
                 const controls = $('<div class="signature-controls"></div>')
-                    .append('<button class="bg-red-500 text-white px-2 py-1 rounded"><i class="fas fa-trash"></i></button>');
+                    .append('<button class="bg-red-500 text-white px-2 py-1 rounded-lg overflow-hidden"><i class="fas fa-trash"></i></button>');
 
                 signatureElement
                     .append(signatureImage)

@@ -168,7 +168,7 @@ app.get('/sign/:id', (req, res) => {
 app.post("/sign-pdf/:id", async (req, res) => {
   try {
     const { signatures } = req.body;
-    console.log("Received signatures:", signatures);
+    // console.log("Received signatures:", signatures);
     const metadata = loadMetadata();
     const pdf = metadata.find((p) => p.id === req.params.id);
 
@@ -186,6 +186,7 @@ app.post("/sign-pdf/:id", async (req, res) => {
 
     // Create a new PDF document
     const pdfDoc = await PDFDocument.load(pdfBytes);
+    console.log("ENTIRE PDF DOCUMENT ::: ",pdfDoc)
 
     // For each signature, add it to the PDF
     for (const sig of signatures) {
