@@ -3,7 +3,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const bodyParser = require("body-parser");
-const { PDFDocument } = require("pdf-lib");
+const { PDFDocument, StandardFonts, rgb } = require("pdf-lib");
 
 const app = express();
 const port = process.env.PORT || 3009;
@@ -150,18 +150,18 @@ app.delete("/delete/:id", (req, res) => {
 });
 
 // Add new route for signing page
-app.get('/sign/:id', (req, res) => {
-    const metadata = loadMetadata();
-    const pdf = metadata.find(p => p.id === req.params.id);
-    
-    if (!pdf) {
-        return res.status(404).send('PDF not found');
-    }
+app.get("/sign/:id", (req, res) => {
+  const metadata = loadMetadata();
+  const pdf = metadata.find((p) => p.id === req.params.id);
 
-    res.render('signing-page', {
-        pdfName: pdf.originalFilename,
-        pdfFilename: pdf.filename
-    });
+  if (!pdf) {
+    return res.status(404).send("PDF not found");
+  }
+
+  res.render("signing-page", {
+    pdfName: pdf.originalFilename,
+    pdfFilename: pdf.filename,
+  });
 });
 
 // New route to add signatures to a PDF
@@ -186,7 +186,7 @@ app.post("/sign-pdf/:id", async (req, res) => {
 
     // Create a new PDF document
     const pdfDoc = await PDFDocument.load(pdfBytes);
-    console.log("ENTIRE PDF DOCUMENT ::: ",pdfDoc)
+    console.log("ENTIRE PDF DOCUMENT ::: ", pdfDoc);
 
     // For each signature, add it to the PDF
     for (const sig of signatures) {
@@ -208,45 +208,90 @@ app.post("/sign-pdf/:id", async (req, res) => {
       const { width: pageWidth, height: pageHeight } = page.getSize();
       console.log("Page dimensions:", { pageWidth, pageHeight });
 
-      // Decode the base64 image (skip the data:image/png;base64, prefix)
-      let signatureImageData = sig.imageData;
-      if (signatureImageData.includes(",")) {
-        signatureImageData = signatureImageData.split(",")[1];
-      }
+      if (sig.type === "comment") {
+        const pdfX = sig.x / 1.5;
+        const pdfY = pageHeight - sig.y / 1.5;
+        const fontSize = (sig.fontSize || 16) / 1.5;
 
-      try {
-        const signatureBytes = Buffer.from(signatureImageData, "base64");
-        let signatureImage;
+        const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-        // Determine if PNG or JPEG based on data
-        if (sig.imageData.includes("data:image/png")) {
-          signatureImage = await pdfDoc.embedPng(signatureBytes);
-        } else {
-          signatureImage = await pdfDoc.embedJpg(signatureBytes);
+        page.drawRectangle({
+          x: pdfX,
+          y: pdfY - sig.height / 1.5,
+          width: sig.width / 1.5,
+          height: sig.height / 1.5,
+          color: rgb(1, 1, 1, 0.5),
+          borderWidth: 0,
+        });
+
+        const words = sig.text.split(" ");
+        const lines = [];
+        let currentLine = words[0];
+        const maxWidth = sig.width / 1.5 - 10;
+
+        for (let i = 1; i < words.length; i++) {
+          const testLine = currentLine + " " + words[i];
+          const textWidth = font.widthOfTextAtSize(testLine, fontSize);
+
+          if (textWidth > maxWidth) {
+            lines.push(currentLine);
+            currentLine = words[i];
+          } else {
+            currentLine = testLine;
+          }
+        }
+        lines.push(currentLine);
+
+        const lineHeight = fontSize * 1.2;
+        lines.forEach((line, index) => {
+          page.drawText(line, {
+            x: pdfX + 5,
+            y: pdfY - (index + 1) * lineHeight,
+            size: fontSize,
+            font: font,
+            color: rgb(0, 0, 0),
+          });
+        });
+      } else {
+        let signatureImageData = sig.imageData;
+        if (signatureImageData.includes(",")) {
+          signatureImageData = signatureImageData.split(",")[1];
         }
 
-        // Transform coordinates
-        const pdfX = sig.x / 1.5; // Divide by the scale used in the viewer (1.5)
-        const pdfY = pageHeight - (sig.y / 1.5 + sig.height / 1.5); // Adjust Y coordinate
-        const sigWidth = sig.width / 1.5;
-        const sigHeight = sig.height / 1.5;
+        try {
+          const signatureBytes = Buffer.from(signatureImageData, "base64");
+          let signatureImage;
 
-        console.log("Final PDF coordinates:", {
-          pdfX,
-          pdfY,
-          sigWidth,
-          sigHeight,
-        });
+          // Determine if PNG or JPEG based on data
+          if (sig.imageData.includes("data:image/png")) {
+            signatureImage = await pdfDoc.embedPng(signatureBytes);
+          } else {
+            signatureImage = await pdfDoc.embedJpg(signatureBytes);
+          }
 
-        // Add the signature to the page
-        page.drawImage(signatureImage, {
-          x: pdfX,
-          y: pdfY,
-          width: sigWidth,
-          height: sigHeight,
-        });
-      } catch (err) {
-        console.error("Error embedding signature:", err);
+          // Transform coordinates
+          const pdfX = sig.x / 1.5; // Divide by the scale used in the viewer (1.5)
+          const pdfY = pageHeight - (sig.y / 1.5 + sig.height / 1.5); // Adjust Y coordinate
+          const sigWidth = sig.width / 1.5;
+          const sigHeight = sig.height / 1.5;
+
+          console.log("Final PDF coordinates:", {
+            pdfX,
+            pdfY,
+            sigWidth,
+            sigHeight,
+          });
+
+          // Add the signature to the page
+          page.drawImage(signatureImage, {
+            x: pdfX,
+            y: pdfY,
+            width: sigWidth,
+            height: sigHeight,
+          });
+        } catch (err) {
+          console.error("Error embedding signature:", err);
+        }
       }
     }
 
